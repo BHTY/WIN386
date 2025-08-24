@@ -25,6 +25,6 @@ https://board.flatassembler.net/topic.php?t=21286
 https://fd.lod.bz/rbil/interrup/windows/2f1605.html#table-02634
 The INT 2Fh AX=1605h is sufficient to get the v86->rm entry point, but obtaining the EMM import structures requires more work.
 
-A debugger is in development, it works on a simple premise. Write a real-mode TSR that hooks INT 68h. Patch the real-mode entry point of WIN386.386 to do an INT68 just before entering protected-mode (replace the fast A20 support code). At this point, the TSR is in control and can patch the IDT that WIN386 is about to load to insert itself into key interrupt handlers.
+A debugger is in development, it works on a simple premise. Write a real-mode TSR that hooks INT 69h. Patch the real-mode entry point of WIN386.386 to do an INT69 just before entering protected-mode (replace the fast A20 support code). At this point, the TSR is in control and can patch the IDT that WIN386 is about to load to insert itself into key interrupt handlers.
 
-Windows/386 appears to lack any debugging hooks (though it's possible a special debugging version existed in the DDK that had them). EMM386 appears to have hooks for a debugger called Deb386 that uses the same API as WDeb386.
+Windows/386 appears to have debugging hooks via INT 68H, just like Windows 3.0. WIN386.EXE does an INT 68H call with AH=43 (D386_Identify), but doesn't seem to make any other recognizable calls. Evidently, the API is different. EMM386 appears to have hooks for a debugger called Deb386 that uses the same API as WDeb386.
