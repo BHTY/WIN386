@@ -1,0 +1,31 @@
+# Makefile for W386DBG
+
+ASM = tasm
+LINK = tlink
+
+DEBUG=1
+
+OBJS = main.obj 
+INC = WIN386.INC PRINT.INC
+
+OUTFILE = W386DBG.EXE
+
+!if $d(DEBUG)
+ASMFLAGS=/zi
+LFLAGS = /v /m
+!else
+ASMFLAGS=
+LFLAGS=
+!endif
+
+.asm.obj:
+    $(ASM) $(ASMFLAGS) $< $@ 
+
+default: $(OUTFILE)
+
+clean:	
+	del *.obj
+	del *.exe
+
+$(OUTFILE): $(OBJS) $(INC)
+    $(LINK) $(LFLAGS) $(OBJS), $@

@@ -1,0 +1,27 @@
+;   DOS.INC
+;
+;   Definitions for DOS API
+;   
+;   Copyright (c) 2025 by Will Klees
+
+; INT 21H entry points
+DOS_PRINT   EQU 09H
+DOS_SETVECT EQU 25H
+DOS_TSR     EQU 31H
+DOS_GETVECT EQU 35H
+DOS_OPEN    EQU 3DH
+DOS_CLOSE   EQU 3EH
+DOS_READ    EQU 3FH
+DOS_WRITE   EQU 40H
+DOS_SEEK    EQU 42H
+DOS_ALLOC   EQU 48H
+DOS_FREE    EQU 49H
+DOS_SETBLK  EQU 4AH
+DOS_EXIT    EQU 4CH
+
+; Definitions for DOS_SEEK
+SEEK_SET    EQU 0
+SEEK_CUR    EQU 1
+SEEK_END    EQU 2
+
+; DOS error codes

@@ -1,0 +1,33 @@
+MAKE Version 4.0  Copyright (c) 1987, 1996 Borland International
+	tasm /zi main.asm main.obj 
+Turbo Assembler  Version 4.1  Copyright (c) 1988, 1996 Borland International
+
+Assembling file:   main.asm
+**Error** main.asm(77) Illegal instruction
+**Error** main.asm(333) Undefined symbol: XMSMOVE
+**Error** main.asm(334) Undefined symbol: XMSMOVE
+**Error** main.asm(335) Undefined symbol: XMSMOVE
+*Warning* main.asm(335) Argument needs type override
+**Error** main.asm(336) Undefined symbol: XMSMOVE
+**Error** main.asm(337) Undefined symbol: XMSMOVE
+**Error** main.asm(338) Undefined symbol: EMB_PGTBL
+**Error** main.asm(339) Undefined symbol: XMSMOVE
+**Error** main.asm(340) Undefined symbol: XMSMOVE
+**Error** main.asm(341) Undefined symbol: XMSMOVE
+**Error** main.asm(342) Undefined symbol: XMSMOVE
+**Error** main.asm(343) Undefined symbol: XMS_MOVE_EMB
+**Error** main.asm(344) Undefined symbol: XMSCONTROL
+**Error** main.asm(348) Undefined symbol: XMS_LOCK_EMB
+**Error** main.asm(349) Undefined symbol: EMB_PGTBL
+**Error** main.asm(350) Undefined symbol: XMSCONTROL
+**Error** main.asm(488) Undefined symbol: ERR_XMSIN
+**Error** main.asm(497) Undefined symbol: ERR_XMSLK
+**Error** main.asm(506) Undefined symbol: ERR_XMSMV
+**Error** main.asm(515) Undefined symbol: ERR_XMSALC
+Error messages:    20
+Warning messages:  1
+Passes:            1
+Remaining memory:  232k
+
+
+** error 1 ** deleting main.obj

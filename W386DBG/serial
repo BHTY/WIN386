@@ -1,0 +1,357 @@
+%macro outb 2
+    mov dx, %1
+    mov al, %2
+    out dx, al
+%endmacro
+
+init_serial:
+    outb SERIAL_PORT+3, 0x80
+    outb SERIAL_PORT, 0x03
+    outb SERIAL_PORT+1, 0x00
+    outb SERIAL_PORT+3, 0x03
+    outb SERIAL_PORT+2, 0xC7
+    outb SERIAL_PORT+4, 0x0b
+    ret
+
+
+print_hex:
+    push ebp
+    mov ebp, esp
+    mov eax, dword [ebp+0x8]
+    xor edx, edx
+    mov ecx, 0x10000000
+    mov ebx, charset
+
+    print_hex_loop:
+        div ecx
+        xlat
+        push edx
+        push eax
+        call putc
+        pop edx
+        mov eax, edx
+        xor edx, edx
+        shr ecx, 4
+        cmp ecx, 0
+        jne print_hex_loop
+
+    pop ebp
+    ret 0x4
+
+printf: ; cdecl
+    push ebp
+    mov ebp, esp
+    mov ecx, 1
+
+    printf_loop:
+        mov eax, dword [ebp+0x8]
+        mov al, byte [eax]
+        inc dword [ebp+0x8]
+        cmp al, 0
+        je printf_done
+        cmp al, '%'
+        je printf_format
+        push eax
+        call putc
+        jmp printf_loop
+
+        printf_format:
+            mov eax, dword [ebp+0x8]
+            mov al, byte [eax]
+            push ecx
+            push dword [ebp+0x8+ecx*4]
+
+            cmp al, 'c'
+            je printf_char
+            cmp al, 's'
+            je printf_str
+            cmp al, 'x'
+            je printf_hex
+            push '%'
+            call putc
+            pop ecx
+            jmp printf_loop
+
+            printf_char:
+                call putc
+                jmp printf_format_done
+
+            printf_str:
+                call puts32
+                jmp printf_format_done
+
+            printf_hex:
+                call print_hex
+                jmp printf_format_done
+
+            printf_format_done:
+                pop ecx
+                inc ecx
+                inc dword [ebp+0x8]
+        
+        jmp printf_loop
+
+    printf_done:
+        pop ebp
+        ret
+
+puts32:
+    push ebp
+    mov ebp, esp
+
+    puts32_loop:
+        mov esi, dword [ebp+0x8]
+        mov al, byte [esi]
+        cmp al, 0
+        je puts32_done
+        push eax
+        call putc
+        inc dword [ebp+0x8]
+        jmp puts32_loop
+
+    puts32_done:
+    pop ebp
+    ret 0x4
+
+putc:
+    push ebp
+    mov ebp, esp
+
+    mov dx, SERIAL_PORT+5
+   
+    wait_transmit_empty:
+        in al, dx
+        test al, 0x20
+        je wait_transmit_empty
+
+    mov al, byte [ebp+0x8]
+    mov dx, SERIAL_PORT
+    out dx, al
+
+    pop ebp
+    ret 0x4
+
+; Constants
+SERIAL_PORT equ 0x3F8
+
+; Data
+charset: db "0123456789ABCDEF"
+
+
+
+
+extern pic_send_eoi
+global irq4_handler
+global irq3_handler
+extern serial_handler
+
+irq3_handler:
+    pusha
+    push 3
+    call pic_send_eoi
+    add esp, 4
+    push 3
+    call serial_handler
+    add esp, 4
+    popa
+    iretd
+
+irq4_handler:
+    pusha
+    push 4
+    call pic_send_eoi
+    add esp, 4
+    push 4
+    call serial_handler
+    add esp, 4
+    popa
+    iretd
+
+
+/* 
+    Copyright (C) 2024 PIX Kernel
+    Authored by Will Klees
+    serial.c - 16550 UART driver
+*/
+
+#include <io.h>
+#include <serial.h>
+#include <idt.h>
+#include <pic.h>
+
+void irq3_handler();
+void irq4_handler();
+
+serial_params_t serial_params[4] = {
+    {COM1, 0},
+    {COM2, 0},
+    {COM3, 1},
+    {COM4, 1}
+};
+
+int is_transmit_empty(int minor){
+    return io_read_8(minor + 5) & 0x20;
+}
+
+int is_received_ready(int minor){
+    return io_read_8(minor + 5) & 0x1;
+}
+
+void write_serial(int minor, char c){
+    while (is_transmit_empty(minor) == 0);
+    io_write_8(minor, c);
+}
+
+char read_serial(int minor){
+    while (is_received_ready(minor) == 0);
+    return io_read_8(minor);
+}
+
+int get_which_port(int irqno){
+    if (irqno == 3) { // COM2/4
+        if (serial_params[1].type == 0) return 1;
+        return 3;
+    } else { // COM1/3
+        if (serial_params[0].type == 0) return 0;
+        return 2;
+    }
+}
+
+int com_data_available(int port){
+    return serial_params[port].buf.buf_pos_r < serial_params[port].buf.buf_pos_w;
+}
+
+char pop_com_buf(int port){
+    return serial_params[port].buf.buf[(serial_params[port].buf.buf_pos_r++) % BUF_SIZE];
+}
+
+void push_com_buf(int port, char c){
+    serial_params[port].buf.buf[(serial_params[port].buf.buf_pos_w++) % BUF_SIZE] = c;
+}
+
+void serial_handler(int irqno){
+    int port = get_which_port(irqno);
+    char c = read_serial(serial_params[port].io_port);
+
+    push_com_buf(port, c);
+}
+
+int com_write(int minor, const char* buf, size_t count){
+    int bytes = 0;
+    
+    while(count--){
+        write_serial(serial_params[minor].io_port, buf[bytes++]);
+    }
+
+    return bytes;
+}
+
+/*int com_read(int minor, char* buf, size_t count){
+    int bytes = 0;
+
+    while(count--){
+        *(buf++) = read_serial(minor);
+        bytes++;
+    }
+
+    return bytes;
+}*/
+
+int com_read(int minor, char* buf, size_t count){
+    int pos = 0;
+
+    while (count-- && com_data_available(minor)){
+        buf[pos++] = pop_com_buf(minor);
+    }
+
+    if (serial_params[minor].type) { // polling-based
+        while (is_received_ready(serial_params[minor].io_port)) {
+            buf[pos++] = read_serial(serial_params[minor].io_port);
+        }
+    }
+
+    return pos;//num_read;
+}
+
+void com_set_freq(int minor, uint32_t freq){
+    uint16_t port = serial_params[minor].io_port;
+    uint16_t divisor = 115200 / freq;
+    io_write_8(port + 3, 0x80); // enable DLAB (set baud rate divisor)
+    io_write_8(port + 0, divisor & 0xFF); // set divisor to 3 (lo byte) 38400 baud
+    io_write_8(port + 1, divisor >> 8);   //                  (hi byte)
+    io_write_8(port + 3, 0x03); // 8N1
+}
+
+void com_disable_irq(int minor){
+    uint16_t port = serial_params[minor].io_port;
+    io_write_8(port + 1, 0x00); // disable interrupts
+    serial_params[minor].type = 1;
+}
+
+void com_enable_irq(int minor){
+    uint16_t port = serial_params[minor].io_port;
+    io_write_8(port + 1, 0x01); // enable interrupts
+    serial_params[minor].type = 0;
+}
+
+int com_ioctl(int minor, int op, void* data){
+    switch(op){
+        case COM_SET_FREQ:
+            com_set_freq(minor, (uint32_t)data);
+            return 0;
+            break;
+        case COM_ENABLE_IRQ:
+            switch(minor){
+                case 0:
+                    com_disable_irq(2);
+                    com_enable_irq(0);
+                    break;
+                case 1:
+                    com_disable_irq(3);
+                    com_enable_irq(1);
+                    break;
+                case 2:
+                    com_disable_irq(0);
+                    com_enable_irq(2);
+                    break;
+                case 3:
+                    com_disable_irq(1);
+                    com_enable_irq(3);
+                    break;
+            }
+            return 0;
+            break;
+        case COM_DISABLE_IRQ:
+            com_disable_irq(minor);
+            break;
+        default:
+            return -1;
+            break;
+    }
+}
+
+void enable_serial(uint16_t port){
+    io_write_8(port + 2, 0xC7); // Enable FIFo, clear, 14 byte threshold
+    io_write_8(port + 4, 0x0B); // IRQs enabled, RTS/DSR set
+    io_write_8(port + 4, 0x0F); // Set in normal operation mode (IRQs enabled)
+}
+
+void com_init(){
+    int minor = COM1;
+
+    for(int i = 0; i < 4; i++){
+        if (i == 0 || i == 1) {
+            com_enable_irq(i);
+        } else {
+            com_disable_irq(i);
+        }
+        com_set_freq(i, 38400);
+        enable_serial(serial_params[i].io_port);
+    }
+
+    install_isr(IRQ0 + 3, irq3_handler, 0xEE);
+    install_isr(IRQ0 + 4, irq4_handler, 0xEE);
+
+    pic_unmask_irq(0x03);
+    pic_unmask_irq(0x04);
+}

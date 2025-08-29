@@ -1,0 +1,86 @@
+
+    MOV EAX, PA_Debug           ; Initialize the page table
+    OR EAX, 07H
+    MOV PageTbl, EAX
+    ;MOV EAX, 0
+    MOV WORD PTR [XmsMove.dwLength], 4
+    MOV WORD PTR [XmsMove.dwLength+2], 0
+    MOV XmsMove.SourceHandle, 0
+    MOV WORD PTR [XmsMove.SourceOffset], OFFSET PageTbl
+    MOV WORD PTR [XmsMove.SourceOffset+2], CS
+    MOV AX, EMB_PgTbl
+    MOV XmsMove.DestHandle, AX
+    MOV WORD PTR [XmsMove.DestOffset], 0
+    MOV WORD PTR [XmsMove.DestOffset+2], 0
+    MOV SI, OFFSET XmsMove
+    MOV AH, XMS_MOVE_EMB
+    CALL DWORD PTR [XmsControl]
+    CMP AX, 1
+    JNE @@FailXmsMove
+
+    MOV AH, XMS_LOCK_EMB        ; Lock the EMB containing the page table
+    MOV DX, EMB_PgTbl
+    CALL DWORD PTR [XmsControl]
+    CMP AX, 1
+    JNE @@FailXmsLock
+    MOV WORD PTR [PA_PgTbl], BX
+    MOV WORD PTR [PA_PgTbl+2], DX
+
+
+PMJump      DW      OFFSET PModeCopy
+            DW      OFFSET CodeDesc - OFFSET NullDesc
+
+NullDesc    DESC    <0, 0, 0, 0, 0, 0>
+CodeDesc    DESC    <0FFFFH, ?, ?, 0, 0, 0>     ; The access byte (the first zero) SHOULD be defined
+DataDesc    DESC    <?>                         ; idk what to put here yet but I'll figure it out
+
+GDT_Desc    LABEL   WORD
+    DW      OFFSET GDT_Desc - OFFSET NullDesc - 1
+    DD      ?
+
+; Takes input in ESI, EDI, ECX
+; Make CS a use16 alias for the real CS
+; Make ES/DS a flat 4GB segment
+; Remember the almighty A20 line!
+ExtMemCopy  PROC    NEAR
+    CLI
+
+    ; Calculate linear address for GDT_Desc
+    MOV EAX, CS
+    SHL EAX, 4
+    ADD EAX, OFFSET NullDesc
+    MOV DWORD PTR [GDT_Desc+2], EAX
+    SUB EAX, OFFSET NullDesc
+
+    ; Calculate linear address for CS base
+
+
+    LGDT FWORD PTR [GDT_Desc]
+
+    MOV EAX, CR0            ; Enable protected-mode
+    OR EAX, 1
+    MOV CR0, EAX
+
+    JMP DWORD PTR [PMJump]
+ExtMemCopy  ENDP
+
+
+PModeRet    LABEL   FAR
+    MOV AX, CS
+    MOV ES, AX
+    MOV DS, AX
+    STI
+    RET
+
+PModeCopy   PROC    NEAR
+    MOV AX, 10H
+    MOV ES, AX
+    MOV DS, AX
+    REP MOVSB
+    
+    MOV EAX, CR0            ; Disable protected-mode
+    AND EAX, 0FFFFFFFEH
+    MOV CR0, EAX
+
+    JMP _TEXT:PModeRet      ; Far jump into real-mode!
+PModeCopy   ENDP
